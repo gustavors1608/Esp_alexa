@@ -1,149 +1,140 @@
 #include <Arduino.h>
-//#include "WifiPortal.h"
 #include "fauxmoESP.h"
 
+// Define o nome do dispositivo para facilitar a identificação na rede
+#define DEVICE_NAME "ESP32-ALEXA" 
 
+// --- Constantes para os IDs dos dispositivos virtuais ---
+#define ID_RELE1 "Relé 1"
+#define ID_RELE2 "Relé 2"
+#define ID_RELE3 "Relé 3"
+#define ID_RELE4 "Relé 4"
+
+// --- Constantes para os pinos GPIO ---
+#define PIN_WIFI_LED 12 
+#define PIN_STATUS_LED 14
+
+#define PIN_LED_OUT_1 27 
+#define PIN_LED_OUT_2 26 
+#define PIN_LED_OUT_3 25 
+#define PIN_LED_OUT_4 33 
+
+#define PIN_OUT_1 16 
+#define PIN_OUT_2 18 
+#define PIN_OUT_3 21 
+#define PIN_OUT_4 23 
+
+#define PIN_OUT_1_FEEDBACK 4 
+#define PIN_OUT_2_FEEDBACK 17 
+#define PIN_OUT_3_FEEDBACK 19 
+#define PIN_OUT_4_FEEDBACK 22  
+
+// --- Variáveis Globais ---
 fauxmoESP fauxmo;
 
-// -----------------------------------------------------------------------------
+// --- Protótipos de Funções ---
+void wifiSetup();
+void set_out(uint8_t pin, bool state);
 
-#define ID_rele1           "rele 1"
-#define ID_rele2           "rele 2"
-#define ID_rele3           "rele 3"
-#define ID_rele4           "rele 4"
-
-
-//WifiPortal wifi_portal;
-
-#define _PIN_OUT_WIFI_LED 12// out
-#define _PIN_OUT_STATUS_LED 14// out
-
-#define _PIN_LED_OUT_4 33// out
-#define _PIN_LED_OUT_3 25// out
-#define _PIN_LED_OUT_2 26// out
-#define _PIN_LED_OUT_1 27// out
-
-#define _PIN_OUT_1 16// out
-#define _PIN_OUT_2 18// out
-#define _PIN_OUT_3 21// out
-#define _PIN_OUT_4 23// out
-
-#define _PIN_OUT_1_FEEDBACK 4 // in
-#define _PIN_OUT_2_FEEDBACK 17 // in
-#define _PIN_OUT_3_FEEDBACK 19 // in
-#define _PIN_OUT_4_FEEDBACK 22  // in
-
-#define _PIN_GIGA_TESTER 2 // in
-
-#define _PIN_INPUT_ONDEMAND 34 // in
-
-void wifiSetup() {
-    WiFi.mode(WIFI_STA);
-    WiFi.begin(ssid, senha do wifi);
-
-    // Aguarda a conexão
-    while (WiFi.status() != WL_CONNECTED) {
-        Serial.print(".");
-        delay(100);
-    }
-    Serial.println();
-
-    // Conexão estabelecida
-    Serial.printf("[WIFI] SSID: %s, IP address: %s\n", WiFi.SSID().c_str(), WiFi.localIP().toString().c_str());
-}
-
-void set_out(char pin, bool state);
-void callback_config(){
-  digitalWrite(_PIN_OUT_WIFI_LED, !digitalRead(_PIN_OUT_WIFI_LED));
-}
-
+/**
+ * @brief Função de configuração do Arduino.
+ * 
+ * Inicializa a comunicação serial, configura os pinos GPIO,
+ * conecta à rede Wi-Fi e configura os dispositivos virtuais com o FauxmoESP.
+ */
 void setup() {
-  // Inicializa a comunicação serial
   Serial.begin(115200);
 
-  pinMode(_PIN_INPUT_ONDEMAND, INPUT_PULLUP);
-  pinMode(_PIN_OUT_WIFI_LED,OUTPUT);
-  pinMode(_PIN_OUT_STATUS_LED,OUTPUT);
+  // --- Configuração dos pinos GPIO ---
+  pinMode(PIN_WIFI_LED, OUTPUT);
+  pinMode(PIN_STATUS_LED, OUTPUT);
 
-  pinMode(_PIN_OUT_1,OUTPUT);
-  pinMode(_PIN_OUT_2,OUTPUT);
-  pinMode(_PIN_OUT_3,OUTPUT);
-  pinMode(_PIN_OUT_4,OUTPUT);
+  pinMode(PIN_LED_OUT_1, OUTPUT);
+  pinMode(PIN_LED_OUT_2, OUTPUT);
+  pinMode(PIN_LED_OUT_3, OUTPUT);
+  pinMode(PIN_LED_OUT_4, OUTPUT);
 
-  pinMode(_PIN_LED_OUT_1,OUTPUT);
-  pinMode(_PIN_LED_OUT_2,OUTPUT);
-  pinMode(_PIN_LED_OUT_3,OUTPUT);
-  pinMode(_PIN_LED_OUT_4,OUTPUT);
+  pinMode(PIN_OUT_1, OUTPUT);
+  pinMode(PIN_OUT_2, OUTPUT);
+  pinMode(PIN_OUT_3, OUTPUT);
+  pinMode(PIN_OUT_4, OUTPUT);
 
+  // --- Configuração da conexão Wi-Fi ---
   wifiSetup();
-  set_out(_PIN_OUT_WIFI_LED,true);
-  // Define o callback e o intervalo para avisar que ta em config e já abre o portal
-  //wifi_portal.set_config_callback(callback_config, 100);
-  //wifi_portal.connect();
+  digitalWrite(PIN_WIFI_LED, HIGH);
 
+  // --- Configuração do FauxmoESP ---
+  fauxmo.createServer(true); 
+  fauxmo.setPort(80);  
+  fauxmo.enable(true);
 
-    // By default, fauxmoESP creates it's own webserver on the defined port
-    // The TCP port must be 80 for gen3 devices (default is 1901)
-    // This has to be done before the call to enable()
-    fauxmo.createServer(true); // not needed, this is the default value
-    fauxmo.setPort(80); // This is required for gen3 devices
+  // --- Adicionando dispositivos virtuais ---
+  fauxmo.addDevice(ID_RELE1);
+  fauxmo.addDevice(ID_RELE2);
+  fauxmo.addDevice(ID_RELE3);
+  fauxmo.addDevice(ID_RELE4);
 
-    // You have to call enable(true) once you have a WiFi connection
-    // You can enable or disable the library at any moment
-    // Disabling it will prevent the devices from being discovered and switched
-    fauxmo.enable(true);
+  // --- Configuração do callback para quando um dispositivo virtual é acionado ---
+  fauxmo.onSetState([](unsigned char device_id, const char * device_name, bool state, unsigned char value) {
+    Serial.printf("[MAIN] Device #%d (%s) state: %s value: %d\n", device_id, device_name, state ? "ON" : "OFF", value);
 
-    // Add virtual devices
-    fauxmo.addDevice(ID_rele1);
-    fauxmo.addDevice(ID_rele2);
-    fauxmo.addDevice(ID_rele3);
-    fauxmo.addDevice(ID_rele4);
-
-    fauxmo.onSetState([](unsigned char device_id, const char * device_name, bool state, unsigned char value) {
-        
-        // Callback when a command from Alexa is received. 
-        // You can use device_id or device_name to choose the element to perform an action onto (relay, LED,...)
-        // State is a boolean (ON/OFF) and value a number from 0 to 255 (if you say "set kitchen light to 50%" you will receive a 128 here).
-        // Just remember not to delay too much here, this is a callback, exit as soon as possible.
-        // If you have to do something more involved here set a flag and process it in your main loop.
-        
-        Serial.printf("[MAIN] Device #%d (%s) state: %s value: %d\n", device_id, device_name, state ? "ON" : "OFF", value);
-
-        // Checking for device_id is simpler if you are certain about the order they are loaded and it does not change.
-        // Otherwise comparing the device_name is safer.
-
-        if (strcmp(device_name, ID_rele1)==0) {
-            set_out(_PIN_OUT_1,state);
-            set_out(_PIN_LED_OUT_1,state);
-        } else if (strcmp(device_name, ID_rele2)==0) {
-            set_out(_PIN_OUT_2,state);
-            set_out(_PIN_LED_OUT_2,state);
-        } else if (strcmp(device_name, ID_rele3)==0) {
-            set_out(_PIN_OUT_3,state);
-            set_out(_PIN_LED_OUT_3,state);
-        } else if (strcmp(device_name, ID_rele4)==0) {
-            set_out(_PIN_OUT_4,state);
-            set_out(_PIN_LED_OUT_4,state);
-        } 
-    });
+    if (strcmp(device_name, ID_RELE1) == 0) {
+      set_out(PIN_OUT_1, state);
+      set_out(PIN_LED_OUT_1, state);
+    } else if (strcmp(device_name, ID_RELE2) == 0) {
+      set_out(PIN_OUT_2, state);
+      set_out(PIN_LED_OUT_2, state);
+    } else if (strcmp(device_name, ID_RELE3) == 0) {
+      set_out(PIN_OUT_3, state);
+      set_out(PIN_LED_OUT_3, state);
+    } else if (strcmp(device_name, ID_RELE4) == 0) {
+      set_out(PIN_OUT_4, state);
+      set_out(PIN_LED_OUT_4, state);
+    } 
+  });
 }
 
+/**
+ * @brief Função de loop principal do Arduino.
+ * 
+ * Gerencia as requisições do FauxmoESP e atualiza o LED de status.
+ */
 void loop() {  
-
-
-
   fauxmo.handle();
 
-  static unsigned long last = millis();
-  if (millis() - last > 100) {
-      last = millis();
-      set_out(_PIN_OUT_STATUS_LED, !digitalRead(_PIN_OUT_STATUS_LED));
+  static unsigned long lastMillis = 0;
+  if (millis() - lastMillis > 100) {
+    lastMillis = millis();
+    digitalWrite(PIN_STATUS_LED, !digitalRead(PIN_STATUS_LED));
   }
-
 }
 
+/**
+ * @brief Função para configurar e conectar o ESP32 à rede Wi-Fi.
+ * 
+ * Tenta se conectar à rede Wi-Fi com o SSID e senha especificados.
+ * Se a conexão for bem-sucedida, imprime informações sobre a rede na serial.
+ */
+void wifiSetup() {
+  WiFi.mode(WIFI_STA);
+  WiFi.begin("SEU_SSID", "SUA_SENHA"); // Substitua pelo seu SSID e senha
 
+  while (WiFi.status() != WL_CONNECTED) {
+    Serial.print(".");
+    delay(100);
+  }
 
-inline void set_out(char pin, bool state){
-  digitalWrite(pin,state);
+  Serial.println("\nConexão Wi-Fi estabelecida!");
+  Serial.printf("SSID: %s\n", WiFi.SSID().c_str());
+  Serial.printf("Endereço IP: %s\n", WiFi.localIP().toString().c_str());
+}
+
+/**
+ * @brief Define o estado de um pino GPIO.
+ * 
+ * @param pin Número do pino GPIO.
+ * @param state Estado desejado do pino (HIGH ou LOW).
+ */
+void set_out(uint8_t pin, bool state) {
+  digitalWrite(pin, state);
 }
